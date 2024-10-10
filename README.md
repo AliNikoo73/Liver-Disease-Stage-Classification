@@ -65,7 +65,7 @@ Various **visualizations** such as **feature importance plots**, **correlation h
 
 ## 🔍 **Additional Information**
 
-- **Dataset Source**: Clinical data on liver disease.
+- **Dataset Source**: [Liver Cirrhosis Stage Classification](https://www.kaggle.com/datasets/aadarshvelu/liver-cirrhosis-stage-classification)
 - **Preprocessing**: Applied **data scaling**, **outlier removal** using **Interquartile Range (IQR)**, and **missing value imputation** using the mode.
 - **Model Selection**: RandomForest was chosen for its ability to rank feature importance.
 - **Hyperparameter Tuning**: **GridSearchCV** used for optimal model configuration.
