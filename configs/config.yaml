@@ -1,0 +1,45 @@
+# Data paths
+data:
+  raw_data_path: "./data/raw/liver_cirrhosis.csv"
+  processed_data_path: "./data/processed/"
+  train_data_path: "./data/processed/train.csv"
+  test_data_path: "./data/processed/test.csv"
+
+# Model parameters
+model:
+  random_state: 42
+  test_size: 0.2
+  validation_size: 0.2
+  random_forest:
+    n_estimators: [50, 100, 150]
+    max_depth: [5, 10, 20]
+    min_samples_split: [2, 5]
+    min_samples_leaf: [1, 2]
+
+# Feature engineering
+features:
+  numerical_columns:
+    - Age
+    - Bilirubin
+    - Cholesterol
+    - Albumin
+    - Copper
+    - Alk_Phos
+    - SGOT
+    - Tryglicerides
+    - Platelets
+    - Prothrombin
+  categorical_columns:
+    - Sex
+    - Ascites
+    - Hepatomegaly
+    - Spiders
+    - Edema
+    - Drug
+    - Status
+
+# Output paths
+output:
+  models_path: "./models/"
+  plots_path: "./results/plots/"
+  metrics_path: "./results/metrics/" 

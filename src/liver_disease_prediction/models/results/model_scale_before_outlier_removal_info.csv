@@ -1,0 +1,17 @@
+Selected Important Features
+Prothrombin
+Platelets
+Albumin
+Age
+Bilirubin
+SGOT
+Copper
+Alk_Phos
+Tryglicerides
+Cholesterol
+
+Parameter scale before removing outliers,Best Value
+max_depth,20
+min_samples_leaf,1
+min_samples_split,2
+n_estimators,150

@@ -9,26 +9,48 @@ from sklearn.model_selection import (
 )
 from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, classification_report
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import warnings
 import seaborn as sns
 import os
+import sys
+import logging
+from pathlib import Path
+import joblib
+
+# Set up paths
+current_dir = os.path.dirname(os.path.abspath(__file__))
+data_dir = os.path.join(current_dir, "data", "archive")
+results_dir = os.path.join(current_dir, "results")
+plots_dir = os.path.join(results_dir, "saved_plots")
+
+# Create necessary directories
+os.makedirs(data_dir, exist_ok=True)
+os.makedirs(plots_dir, exist_ok=True)
+
+# Check if data file exists
+data_file = os.path.join(data_dir, "liver_cirrhosis.csv")
+if not os.path.exists(data_file):
+    print(f"Error: Data file not found at {data_file}")
+    print("Please ensure the liver_cirrhosis.csv file is placed in the data/archive directory")
+    sys.exit(1)
 
 # Restrict plot formats to 'jpg' and 'png'
 formats = ["jpg", "png"]
-base_dir = "Projects/liver disease detection/results/saved_plots"
 
 # Create directories for the selected formats
 for fmt in formats:
-    os.makedirs(os.path.join(base_dir, fmt), exist_ok=True)
+    os.makedirs(os.path.join(plots_dir, fmt), exist_ok=True)
 
 # Function to save plots in 'jpg' and 'png' formats only
 def save_all_formats(fig, plot_name):
     for fmt in formats:
-        fig.savefig(os.path.join(base_dir, fmt, f"{plot_name}.{fmt}"), format=fmt)
+        save_path = os.path.join(plots_dir, fmt, f"{plot_name}.{fmt}")
+        fig.savefig(save_path, format=fmt)
+        print(f"Saved plot to: {save_path}")
 
 # Function to remove outliers based on IQR
 def remove_outliers_iqr(df, columns):
@@ -51,14 +73,116 @@ def plot_box_plots(df):
         sns.boxplot(data=df, x=column)
         plt.title(f'Box Plot of {column}')
         plt.tight_layout()
-        # plt.show()
-        for fmt in ["jpg"]:
-            plt.savefig(f'Projects/liver disease detection/results/saved_plots/box_plots{column}.{fmt}', format=fmt)
-    plt.close()
+        save_all_formats(plt.gcf(), f'box_plots_{column}')
+        plt.close()
 
+logger = logging.getLogger(__name__)
+
+def get_project_root() -> Path:
+    """Get the project root directory."""
+    current_file = Path(__file__).resolve()
+    return current_file.parent.parent.parent.parent
+
+def load_data(config: dict) -> pd.DataFrame:
+    """Load the dataset."""
+    try:
+        project_root = get_project_root()
+        data_path = project_root / config['data']['raw_data_path'].lstrip('./')
+        if not data_path.exists():
+            raise FileNotFoundError(
+                f"Data file not found at {data_path}. "
+                "Please download the dataset from Kaggle and place it in the data/raw directory."
+            )
+        df = pd.read_csv(data_path)
+        logger.info(f"Loaded data from {data_path}")
+        return df
+    except Exception as e:
+        logger.error(str(e))
+        raise
+
+def preprocess_data(df: pd.DataFrame, config: dict) -> tuple:
+    """Preprocess the data."""
+    try:
+        # Split features and target
+        X = df.drop(columns=["Stage", "N_Days", "Status", "Drug", "Edema", "Sex"])
+        y = df["Stage"]
+
+        # Split data
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, 
+            test_size=config['model']['test_size'],
+            random_state=config['model']['random_state']
+        )
+
+        # Scale numerical features
+        num_cols = X.select_dtypes(include=[np.number]).columns
+        scaler = StandardScaler()
+        X_train_scaled = pd.DataFrame(
+            scaler.fit_transform(X_train[num_cols]),
+            columns=num_cols
+        )
+        X_test_scaled = pd.DataFrame(
+            scaler.transform(X_test[num_cols]),
+            columns=num_cols
+        )
+
+        logger.info("Data preprocessing completed")
+        return X_train_scaled, X_test_scaled, y_train, y_test, scaler
+
+    except Exception as e:
+        logger.error(f"Failed to preprocess data: {e}")
+        raise
+
+def train_model(config: dict) -> None:
+    """Train the model."""
+    try:
+        # Load and preprocess data
+        df = load_data(config)
+        X_train, X_test, y_train, y_test, scaler = preprocess_data(df, config)
+
+        # Grid search
+        param_grid = config['model']['random_forest']
+        rf = RandomForestClassifier(random_state=config['model']['random_state'])
+        grid_search = GridSearchCV(
+            rf, param_grid, cv=5, scoring='accuracy', n_jobs=-1
+        )
+        grid_search.fit(X_train, y_train)
+
+        # Get best model
+        best_model = grid_search.best_estimator_
+        y_pred = best_model.predict(X_test)
+
+        # Calculate metrics
+        accuracy = accuracy_score(y_test, y_pred)
+        report = classification_report(y_test, y_pred)
+
+        logger.info(f"Best parameters: {grid_search.best_params_}")
+        logger.info(f"Test accuracy: {accuracy:.4f}")
+        logger.info(f"Classification report:\n{report}")
+
+        # Save model and scaler
+        project_root = get_project_root()
+        model_path = project_root / config['output']['models_path'].lstrip('./')
+        model_path.mkdir(parents=True, exist_ok=True)
+        joblib.dump(best_model, model_path / 'model.joblib')
+        joblib.dump(scaler, model_path / 'scaler.joblib')
+        logger.info(f"Model and scaler saved in {model_path}")
+
+        # Save metrics
+        metrics_path = project_root / config['output']['metrics_path'].lstrip('./')
+        metrics_path.mkdir(parents=True, exist_ok=True)
+        with open(metrics_path / 'metrics.txt', 'w') as f:
+            f.write(f"Best parameters: {grid_search.best_params_}\n")
+            f.write(f"Test accuracy: {accuracy:.4f}\n")
+            f.write(f"Classification report:\n{report}")
+        logger.info(f"Metrics saved in {metrics_path}")
+
+    except Exception as e:
+        logger.error(f"Failed to train model: {e}")
+        raise
 
 # Load dataset & preprocess
-df = pd.read_csv("Projects/liver disease detection/data/archive/liver_cirrhosis.csv")
+df = pd.read_csv(data_file)
 # print(df.isna().sum()) # Check for missing values
 X = df.drop(columns=["Stage", "N_Days", "Status", "Drug", "Edema", "Sex"])
 y = df["Stage"]
@@ -145,7 +269,8 @@ best_params_df = pd.DataFrame({
 })
 
 # Saving both DataFrames to a single CSV
-with open('Projects/liver disease detection/results/model_scale before outlier removal_info.csv', 'w') as f:
+model_info_file = os.path.join(results_dir, 'model_scale_before_outlier_removal_info.csv')
+with open(model_info_file, 'w') as f:
     # Write the important features first
     important_features_df.to_csv(f, index=False)
     
@@ -155,7 +280,7 @@ with open('Projects/liver disease detection/results/model_scale before outlier r
     # Write the best parameters next
     best_params_df.to_csv(f, index=False)
 
-print("Model info saved to 'model_scale before outlier removal_info.csv'")
+print(f"Model info saved to '{model_info_file}'")
 
 # 1. Correlation Heatmap
 fig, ax = plt.subplots(figsize=(12, 10))
@@ -208,13 +333,14 @@ print("now move on to next stage where we remove outliers and then scale and the
 print("\n" + "==" * 50)
 
 # Outlier Removal and Retraining on initial dataset
-outlier_columns = X.drop(columns = ["Age", "Ascites", "Hepatomegaly", "Spiders"]).columns
-X_Second = X[outlier_columns]
+X_Second = X.copy()  # Use all features for the second stage
 
 # Train-test split
-X_train2, X_test2, y_train2, y_test2 = train_test_split(X_Second, y, test_size=0.2, random_state=42) # Split data into training and testing sets
+X_train2, X_test2, y_train2, y_test2 = train_test_split(X_Second, y, test_size=0.2, random_state=42)
 
-X_train_final_no_outliers = remove_outliers_iqr(X_train2, outlier_columns)
+# Remove outliers from numerical columns only
+num_cols = X_train2.select_dtypes(include=[np.number]).columns
+X_train_final_no_outliers = remove_outliers_iqr(X_train2, num_cols)
 X_train_final_no_outliers.reset_index(drop=True, inplace=True)
 y_train_no_outliers = y_train2.iloc[X_train_final_no_outliers.index]
 
@@ -269,7 +395,8 @@ best_params_df = pd.DataFrame({
 })
 
 # Saving both DataFrames to a single CSV
-with open('Projects/liver disease detection/results/model_scale after outlier removal_info.csv', 'w') as f:
+model_info_file_2 = os.path.join(results_dir, 'model_scale_after_outlier_removal_info.csv')
+with open(model_info_file_2, 'w') as f:
     # Write the important features first
     important_features_df.to_csv(f, index=False)
     
@@ -279,7 +406,7 @@ with open('Projects/liver disease detection/results/model_scale after outlier re
     # Write the best parameters next
     best_params_df.to_csv(f, index=False)
 
-print("Model info saved to 'model_scale after outlier removal_info.csv'")
+print(f"Model info saved to '{model_info_file_2}'")
 
 # Feature Importance and Performance Metrics After Outlier Removal
 fig, ax = plt.subplots(1, 2, figsize=(14, 6))

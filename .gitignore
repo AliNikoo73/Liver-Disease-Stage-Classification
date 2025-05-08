@@ -20,30 +20,42 @@ wheels/
 .installed.cfg
 *.egg
 
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# VS Code
-.vscode/
-
-# PyCharm
-.idea/
-
-# Environment
-.env
-.venv
-env/
+# Virtual Environment
 venv/
 ENV/
+env/
+.env
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb
 
 # Data files
-data/*.csv
-data/*.xlsx
-data/*.xls
-data/*.parquet
-data/*.feather
-data/*.pickle
-data/*.pkl
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+
+# Model files
+models/*
+!models/.gitkeep
+
+# Results
+results/plots/*
+results/metrics/*
+!results/plots/.gitkeep
+!results/metrics/.gitkeep
+
+# Logs
+*.log
+logs/
 
 # Coverage
 .coverage
@@ -54,9 +66,6 @@ htmlcov/
 *.joblib
 *.pkl
 *.h5
-
-# Logs
-*.log
 
 # Results and plots
 results/*.png
